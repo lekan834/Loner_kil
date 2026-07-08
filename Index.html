@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Loner Kill</title>
+    <style>
+        /* ================================================================= */
+        /* 1. CINEMATIC SPACE INTERFACE STYLES                               */
+        /* ================================================================= */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #020208;
+            font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #fff;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Heads Up Dashboard Layout */
+        .hud-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 5;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-shadow: 0 0 8px #000;
+        }
+
+        .hud-panel {
+            background: rgba(10, 15, 30, 0.7);
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+        }
+
+        .lives-indicator { color: #ff3366; font-size: 16px; }
+        .score-indicator { color: #00ffcc; }
+        .powerup-timer { color: #ffcc00; font-size: 12px; margin-top: 4px; }
+
+        /* Game State Layer Screens - Translucent Glass Morphic Effect */
+        .ui-screen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: radial-gradient(circle at center, rgba(7, 11, 26, 0.7) 0%, rgba(2, 3, 8, 0.85) 100%);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            padding: 20px;
+        }
+
+        .game-title {
+            font-size: 40px;
+            font-weight: 900;
+            margin: 0 0 10px 0;
+            letter-spacing: 4px;
+            background: linear-gradient(180deg, #00ffff 0%, #ff00ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: white;
+            border: none;
+            padding: 16px 50px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 30px;
+            transition: transform 0.1s;
+        }
+        .btn-start:active { transform: scale(0.95); }
+
+        /* Tiny Home Page Tag Signature Styling */
+        .brand-tag {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.25);
+            font-family: monospace;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="hud-container">
+        <div class="hud-panel">
+            <div class="score-indicator">SCORE: <span id="score-val">0</span></div>
+            <div id="tier-indicator" style="color: #a0a5ff; font-size: 11px; margin-top: 2px;">WEAPON TIER: 1</div>
+        </div>
+        <div class="hud-panel" style="text-align: right;">
+            <div class="lives-indicator" id="lives-val">❤️❤️❤️</div>
+            <div id="width-timer" class="powerup-timer hidden">WIDER SHIP: 60s</div>
+        </div>
+    </div>
+
+    <div id="main-menu" class="ui-screen">
+        <h1 class="game-title">LONER KILL</h1>
+        <p style="color: #cbd5e1; max-width: 300px; font-size: 14px; margin: 5px 0; line-height: 1.6; text-shadow: 0 2px 4px rgba(0,0,0,0.6);">
+            Drag anywhere to fly your battleship in all directions. Intercept gifts to transform your weaponry and survive the flagship bosses!
+        </p>
+        <button class="btn-start" onclick="startGame()">Launch Mission</button>
+        
+        <div class="brand-tag">by loner</div>
+    </div>
+
+    <div id="game-over-screen" class="ui-screen hidden">
+        <h1 class="game-title" style="background: linear-gradient(180deg, #ff3366 0%, #990022 100%); -webkit-background-clip: text;">FLEET DESTROYED</h1>
+        <p style="color: #a0a5ff;">Final Battle Record: <span id="final-score" style="font-weight:bold; color:#00ffcc;">0</span></p>
+        <button class="btn-start" style="background: linear-gradient(135deg, #ff3366, #ff0055); box-shadow: 0 0 25px rgba(255,51,102,0.4);" onclick="startGame()">Respawn Fleet</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Core Game System State Variables
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let currentWave = 1;
+        let bossActive = false;
+        let nextBossScore = 600; 
+        let bossCount = 0;
+
+        // Entities Trackers
+        let player;
+        let enemies = [];
+        let playerLasers = [];
+        let enemyLasers = [];
+        let powerUps = [];
+        let stars = [];
+        let particles = [];
+        
+        // Menu Cinematic Simulation Trackers
+        let menuShips = [];
+        let menuSpawnTimer = 0;
+
+        // Operational Timers
+        let enemyFireTimer = 0;
+        let playerFireTimer = 0;
+        let spawnTimer = 0;
+
+        function initStars() {
+            stars = [];
+            for(let i=0; i<80; i++) {
+                stars.push({
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    size: Math.random() * 2,
+                    speed: Math.random() * 1.5 + 0.5
+                });
+            }
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if(!stars.length) initStars();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // ==========================================
+        // STRUCTURAL ENTITY BUILDERS
+        // ==========================================
+        class PlayerShip {
+            constructor() {
+                this.baseWidth = 46;
+                this.width = this.baseWidth;
+                this.height = 36;
+                this.x = canvas.width / 2 - this.width / 2;
+                this.y = canvas.height - 120;
+                
+                this.targetX = this.x;
+                this.targetY = this.y;
+                
+                this.weaponTier = 1; 
+                this.widthPowerUpTimer = 0; 
+            }
+
+            update() {
+                this.x += (this.targetX - this.x) * 0.25;
+                this.y += (this.targetY - this.y) * 0.25;
+                
+                if (this.x < 0) this.x = 0;
+                if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+                
+                if (this.y < 70) this.y = 70;
+                if (this.y > canvas.height - this.height - 15) this.y = canvas.height - this.height - 15;
+
+                if (this.widthPowerUpTimer > 0) {
+                    this.widthPowerUpTimer--;
+                    this.width = this.baseWidth * 1.6; 
+                    document.getElementById('width-timer').classList.remove('hidden');
+                    document.getElementById('width-timer').innerText = `WIDER SHIP: ${Math.ceil(this.widthPowerUpTimer / 60)}s`;
+                    
+                    if (this.widthPowerUpTimer <= 0) {
+                        this.width = this.baseWidth;
+                        document.getElementById('width-timer').classList.add('hidden');
+                    }
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#00f2fe';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.strokeStyle = '#00f2fe';
+                ctx.lineWidth = 2;
+
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height/2);
+                ctx.lineTo(this.width/4, -this.height/8);
+                ctx.lineTo(this.width/2, this.height/2);
+                ctx.lineTo(this.width/4, this.height/4);
+                ctx.lineTo(-this.width/4, this.height/4);
+                ctx.lineTo(-this.width/2, this.height/2);
+                ctx.lineTo(-this.width/4, -this.height/8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = Math.random() > 0.5 ? '#ff3300' : '#ffaa00';
+                ctx.shadowColor = '#ff3300';
+                ctx.beginPath();
+                ctx.moveTo(-6, this.height/4);
+                ctx.lineTo(0, this.height/2 + (Math.random()*8));
+                ctx.lineTo(6, this.height/4);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        class EnemyShip {
+            constructor(x, y, isBoss = false, multiplier = 1) {
+                this.isBoss = isBoss;
+                this.width = isBoss ? 110 : 38;
+                this.height = isBoss ? 75 : 28;
+                this.x = x;
+                this.y = y;
+                this.hp = isBoss ? (15 + multiplier * 10) : 1;
+                this.maxHp = this.hp;
+                
+                this.dx = isBoss ? 2 : (Math.random() > 0.5 ? 1.8 : -1.8);
+                this.dy = isBoss ? 0.6 : 0.9; 
+                
+                this.color = isBoss ? '#ff0055' : '#b3b9c9';
+                this.fireRate = isBoss ? 25 : (Math.random() * 100 + 120);
+                this.fireClock = Math.random() * 50;
+            }
+
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+
+                if (this.x <= 5 || this.x >= canvas.width - this.width - 5) {
+                    this.dx *= -1;
+                }
+
+                if (!this.isBoss) {
+                    if (this.y >= canvas.height / 2) {
+                        this.dy = -Math.abs(this.dy); 
+                    } else if (this.y <= 40) {
+                        this.dy = Math.abs(this.dy);  
+                    }
+                } else {
+                    if (this.y >= canvas.height / 3) {
+                        this.dy = -Math.abs(this.dy);
+                    } else if (this.y <= 40) {
+                        this.dy = Math.abs(this.dy);
+                    }
+                }
+
+                this.fireClock++;
+                if(this.fireClock >= this.fireRate) {
+                    this.fireClock = 0;
+                    fireEnemyLaser(this);
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                
+                ctx.shadowBlur = this.isBoss ? 20 : 8;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = this.isBoss ? '#ff00ff' : '#ffffff';
+                ctx.lineWidth = this.isBoss ? 3 : 1.5;
+
+                ctx.beginPath();
+                ctx.arc(0, -this.height/6, this.width/4, Math.PI, 0, false);
+                ctx.lineTo(this.width/2, 0);
+                ctx.quadraticCurveTo(0, this.height/3, -this.width/2, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = this.isBoss ? '#ff00ff' : '#7f8ca3';
+                const legW = this.width / 10;
+                const legH = this.height / 3;
+                ctx.fillRect(-this.width/3, this.height/6, legW, legH);
+                ctx.fillRect(-legW/2, this.height/4, legW, legH);
+                ctx.fillRect(this.width/3 - legW, this.height/6, legW, legH);
+
+                if(this.isBoss) {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.fillRect(-this.width/2, -this.height, this.width, 6);
+                    ctx.fillStyle = '#ff0055';
+                    ctx.fillRect(-this.width/2, -this.height, this.width * (this.hp / this.maxHp), 6);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class SpaceLaser {
+            constructor(x, y, dy, isPlayer) {
+                this.x = x;
+                this.y = y;
+                this.dy = dy;
+                this.isPlayer = isPlayer;
+                this.width = isPlayer ? 3 : 4;
+                this.height = isPlayer ? 16 : 14;
+            }
+
+            update() { this.y += this.dy; }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.isPlayer ? '#00ffff' : '#ff0033';
+                ctx.fillStyle = this.isPlayer ? '#00ffff' : '#ff0033';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.restore();
+            }
+        }
+
+        class GiftPackage {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.dy = 1.8;
+                this.radius = 12;
+                this.type = Math.random() > 0.35 ? 'weapon' : 'length';
+                this.color = this.type === 'weapon' ? '#ffcc00' : '#00ff7f';
+                this.pulse = 0;
+            }
+
+            update() { 
+                this.y += this.dy; 
+                this.pulse += 0.1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                let scale = 1 + Math.sin(this.pulse) * 0.15;
+                ctx.scale(scale, scale);
+
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * this.radius,
+                               Math.sin((18 + i * 72) * Math.PI / 180) * this.radius);
+                    ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * (this.radius/2),
+                               Math.sin((54 + i * 72) * Math.PI / 180) * (this.radius/2));
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.type === 'weapon' ? 'W' : 'L', 0, 0);
+
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // SYSTEM OPERATIONAL EVENT FUNCTIONS
+        // ==========================================
+        function firePlayerLaser() {
+            const p = player;
+            const laserSpeed = -9;
+            
+            if (p.weaponTier === 1) {
+                playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
+            } else if (p.weaponTier === 2) {
+                playerLasers.push(new SpaceLaser(p.x + 4, p.y + 10, laserSpeed, true));
+                playerLasers.push(new SpaceLaser(p.x + p.width - 7, p.y + 10, laserSpeed, true));
+            } else if (p.weaponTier === 3) {
+                playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
+                let lLeft = new SpaceLaser(p.x + 2, p.y + 12, laserSpeed, true); lLeft.dx = -1.5;
+                let lRight = new SpaceLaser(p.x + p.width - 5, p.y + 12, laserSpeed, true); lRight.dx = 1.5;
+                playerLasers.push(lLeft); playerLasers.push(lRight);
+            } else { 
+                playerLasers.push(new SpaceLaser(p.x, p.y + 12, laserSpeed, true));
+                playerLasers.push(new SpaceLaser(p.x + p.width/3, p.y, laserSpeed, true));
+                playerLasers.push(new SpaceLaser(p.x + (p.width/3 * 2) - 3, p.y, laserSpeed, true));
+                playerLasers.push(new SpaceLaser(p.x + p.width - 3, p.y + 12, laserSpeed, true));
+            }
+        }
+
+        function fireEnemyLaser(enemy) {
+            let speed = enemy.isBoss ? 5 : 4.5;
+            if (enemy.isBoss) {
+                enemyLasers.push(new SpaceLaser(enemy.x + enemy.width/2, enemy.y + enemy.height, speed, false));
+                let l1 = new SpaceLaser(enemy.x + enemy.width/4, enemy.y + enemy.height, speed, false); l1.dx = -1;
+                let l2 = new SpaceLaser(enemy.x + (enemy.width/4 * 3), enemy.y + enemy.height, speed, false); l2.dx = 1;
+                enemyLasers.push(l1); enemyLasers.push(l2);
+            } else {
+                enemyLasers.push(new SpaceLaser(enemy.x + enemy.width/2 - 2, enemy.y + enemy.height, speed, false));
+            }
+        }
+
+        function spawnWave() {
+            if(bossActive) return;
+
+            if (score >= nextBossScore) {
+                bossActive = true;
+                enemies = []; 
+                bossCount++;
+                enemies.push(new EnemyShip(canvas.width / 2 - 55, 40, true, bossCount));
+                nextBossScore += 1200; 
+                return;
+            }
+
+            if(enemies.length === 0) {
+                const rowCount = Math.min(3, 1 + Math.floor(score / 400));
+                const colCount = Math.floor(canvas.width / 55);
+                
+                for(let r=0; r < rowCount; r++) {
+                    for(let c=1; c < colCount - 1; c++) {
+                        enemies.push(new EnemyShip(c * 52, 40 + (r * 38), false));
+                    }
+                }
+                currentWave++;
+            }
+        }
+
+        function triggerDebris(x, y, color, amount = 10) {
+            for(let i=0; i<amount; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    radius: Math.random() * 2.5 + 1,
+                    alpha: 1,
+                    color: color
+                });
+            }
+        }
+
+        // ================================================================= */
+        // MENU LIVE CLASH ENGINE WITH DYNAMIC TOWED "LEKAN" BANNERS         */
+        // ================================================================= */
+function updateAndRenderMenuClash() {
+            menuSpawnTimer++;
+            if (menuSpawnTimer > 75) {
+                menuSpawnTimer = 0;
+                let randomY = Math.random() * (canvas.height - 240) + 120;
+                
+                // Blue Cruiser variant entering from Left side
+                menuShips.push({
+                    x: -60, y: randomY, dx: 3.2, width: 40, height: 28, color: '#00f2fe', structure: 'player'
+                });
+                // Red Alien Raider variant entering from Right side
+                menuShips.push({
+                    x: canvas.width + 60, y: randomY + (Math.random() * 50 - 25), dx: -3.2, width: 38, height: 28, color: '#ff0055', structure: 'enemy'
+                });
+            }
+
+            for (let i = menuShips.length - 1; i >= 0; i--) {
+                let s1 = menuShips[i];
+                s1.x += s1.dx;
+
+                // 1. Draw base vector geometries of the ships
+                ctx.save();
+                ctx.translate(s1.x + s1.width/2, s1.y + s1.height/2);
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = s1.color;
+                ctx.fillStyle = s1.color;
+                
+                ctx.beginPath();
+                if (s1.structure === 'player') {
+                    ctx.moveTo(s1.width/2, 0);
+                    ctx.lineTo(-s1.width/2, -s1.height/2);
+                    ctx.lineTo(-s1.width/4, 0);
+                    ctx.lineTo(-s1.width/2, s1.height/2);
+                } else {
+                    ctx.arc(0, 0, s1.width/3, 0, Math.PI * 2);
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // 2. RENDERING THE DYNAMIC "LEKAN" TOWED BANNER
+                ctx.shadowBlur = 0; // Disable heavy blur on text elements for clean visibility
+                ctx.lineWidth = 1;
+                ctx.font = 'bold 9px monospace';
+                
+                if (s1.structure === 'player') {
+                    // Ship moving Right -> Draw towing cable and banner box lagging on Left
+                    ctx.strokeStyle = 'rgba(0, 242, 254, 0.4)';
+                    ctx.beginPath();
+                    ctx.moveTo(-s1.width/2, 0);
+                    ctx.lineTo(-s1.width/2 - 12, -4);
+                    ctx.stroke();
+
+                    // Fill container box
+                    ctx.fillStyle = 'rgba(10, 25, 50, 0.7)';
+                    ctx.strokeStyle = '#00f2fe';
+                    ctx.fillRect(-s1.width/2 - 52, -11, 40, 14);
+                    ctx.strokeRect(-s1.width/2 - 52, -11, 40, 14);
+
+                    // Name overlay typography
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('LEKAN', -s1.width/2 - 32, -3);
+                } else {
+                    // Ship moving Left -> Draw towing cable and banner box lagging on Right
+                    ctx.strokeStyle = 'rgba(255, 0, 85, 0.4)';
+                    ctx.beginPath();
+                    ctx.moveTo(s1.width/2, 0);
+                    ctx.lineTo(s1.width/2 + 12, -4);
+                    ctx.stroke();
+
+                    // Fill container box
+                    ctx.fillStyle = 'rgba(40, 10, 25, 0.7)';
+                    ctx.strokeStyle = '#ff0055';
+                    ctx.fillRect(s1.width/2 + 12, -11, 40, 14);
+                    ctx.strokeRect(s1.width/2 + 12, -11, 40, 14);
+
+                    // Name overlay typography
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('LEKAN', s1.width/2 + 32, -3);
+                }
+                ctx.restore();
+
+                // 3. Collision evaluations checks
+                for(let j = menuShips.length - 1; j >= 0; j--) {
+                    if (i === j) continue;
+                    let s2 = menuShips[j];
+
+                    if (s1.x < s2.x + s2.width && s1.x + s1.width > s2.x &&
+                        s1.y < s2.y + s2.height && s1.y + s1.height > s2.y) {
+                        
+                        triggerDebris(s1.x + s1.width/2, s1.y + s1.height/2, '#ffcc00', 16);
+                        triggerDebris(s1.x + s1.width/2, s1.y + s1.height/2, '#ff0055', 10);
+                        
+                        menuShips.splice(Math.max(i, j), 1);
+                        menuShips.splice(Math.min(i, j), 1);
+                        break;
+                    }
+                }
+
+                // Boundary cleaner
+                if(s1 && (s1.x > canvas.width + 120 || s1.x < -120)) {
+                    menuShips.splice(i, 1);
+                }
+            }
+        }
+
+        // ==========================================
+        // INPUT HANDLERS (2D TOUCH COUPLING)
+        // ==========================================
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if(!gameRunning) return;
+            player.targetX = e.touches[0].clientX - player.width/2;
+            player.targetY = e.touches[0].clientY - player.height/2;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if(!gameRunning) return;
+            player.targetX = e.touches[0].clientX - player.width/2;
+            player.targetY = e.touches[0].clientY - player.height/2;
+        });
+
+        // ==========================================
+        // LIFECYCLE AND MASTER LOOP CONTROLLER
+        // ==========================================
+        function startGame() {
+            score = 0;
+            lives = 3;
+            bossActive = false;
+            nextBossScore = 600;
+            bossCount = 0;
+            enemies = [];
+            playerLasers = [];
+            enemyLasers = [];
+            powerUps = [];
+            particles = [];
+            menuShips = []; 
+            
+            document.getElementById('score-val').innerText = score;
+            document.getElementById('lives-val').innerText = '❤️❤️❤️';
+            document.getElementById('tier-indicator').innerText = 'WEAPON TIER: 1';
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('width-timer').classList.add('hidden');
+
+            player = new PlayerShip();
+            resizeCanvas();
+            
+            player.targetX = player.x;
+            player.targetY = player.y;
+            
+            gameRunning = true;
+        }
+
+        function handlePlayerDeath() {
+            lives--;
+            triggerDebris(player.x + player.width/2, player.y + player.height/2, '#ff0055', 25);
+            
+            let lifeIcons = '';
+            for(let i=0; i<lives; i++) lifeIcons += '❤️';
+            document.getElementById('lives-val').innerText = lifeIcons || '☠️';
+
+            player.weaponTier = 1;
+            player.width = player.baseWidth;
+            player.widthPowerUpTimer = 0;
+            document.getElementById('tier-indicator').innerText = 'WEAPON TIER: 1';
+            document.getElementById('width-timer').classList.add('hidden');
+
+            if(lives <= 0) {
+                gameRunning = false;
+                document.getElementById('final-score').innerText = score;
+                document.getElementById('game-over-screen').classList.remove('hidden');
+            } else {
+                player.x = canvas.width / 2 - player.width / 2;
+                player.y = canvas.height - 120;
+                player.targetX = player.x;
+                player.targetY = player.y;
+            }
+        }
+        function globalEngineLoop() {
+            ctx.fillStyle = '#02020a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#ffffff';
+            stars.forEach(star => {
+                star.y += star.speed;
+                if(star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            });
+
+            if (gameRunning) {
+                /* ========================================================= */
+                /* ACTIVE PLAY RUNTIME SUB-LOOP                              */
+                /* ========================================================= */
+                player.update();
+                player.draw();
+
+                playerFireTimer++;
+                if(playerFireTimer >= 14) { 
+                    playerFireTimer = 0;
+                    firePlayerLaser();
+                }
+
+                spawnWave();
+
+                // Process Player Lasers
+                for(let i = playerLasers.length - 1; i >= 0; i--) {
+                    let pl = playerLasers[i];
+                    if(pl.dx) pl.x += pl.dx; 
+                    pl.update();
+                    pl.draw();
+
+                    if(pl.y < -20) {
+                        playerLasers.splice(i, 1);
+                        continue;
+                    }
+
+                    for(let j = enemies.length - 1; j >= 0; j--) {
+                        let en = enemies[j];
+                        if(pl.x > en.x && pl.x < en.x + en.width && pl.y > en.y && pl.y < en.y + en.height) {
+                            playerLasers.splice(i, 1);
+                            en.hp--;
+                            triggerDebris(pl.x, pl.y, '#00ffff');
+
+                            if(en.hp <= 0) {
+                                triggerDebris(en.x + en.width/2, en.y + en.height/2, en.color, en.isBoss ? 30 : 12);
+                                score += en.isBoss ? 250 : 20;
+                                document.getElementById('score-val').innerText = score;
+
+                                if(en.isBoss) bossActive = false;
+
+                                if(Math.random() < 0.20 || en.isBoss) {
+                                    powerUps.push(new GiftPackage(en.x + en.width/2, en.y + en.height));
+                                }
+
+                                enemies.splice(j, 1);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // Process Enemies Fleet
+                for(let i = enemies.length - 1; i >= 0; i--) {
+                    let en = enemies[i];
+                    en.update();
+                    en.draw();
+
+                    if(en.x < player.x + player.width && en.x + en.width > player.x &&
+                       en.y < player.y + player.height && en.y + en.height > player.y) {
+                        enemies.splice(i, 1);
+                        if(en.isBoss) bossActive = false;
+                        handlePlayerDeath();
+                    }
+
+                    if(en.y > canvas.height + 40) {
+                        enemies.splice(i, 1);
+                        if(en.isBoss) bossActive = false;
+                    }
+                }
+
+                // Process Enemy Lasers
+                for(let i = enemyLasers.length - 1; i >= 0; i--) {
+                    let el = enemyLasers[i];
+                    if(el.dx) el.x += el.dx;
+                    el.update();
+                    el.draw();
+
+                    if(el.y > canvas.height + 20) {
+                        enemyLasers.splice(i, 1);
+                        continue;
+                    }
+
+                    if(el.x > player.x && el.x < player.x + player.width && el.y > player.y && el.y < player.y + player.height) {
+                        enemyLasers.splice(i, 1);
+                        handlePlayerDeath();
+                    }
+                }
+
+                // Process Gifts
+                for(let i = powerUps.length - 1; i >= 0; i--) {
+                    let pu = powerUps[i];
+                    pu.update();
+                    pu.draw();
+
+                    if(pu.y > canvas.height + 30) {
+                        powerUps.splice(i, 1);
+                        continue;
+                    }
+
+                    if(pu.x > player.x && pu.x < player.x + player.width && pu.y > player.y && pu.y < player.y + player.height) {
+                        triggerDebris(pu.x, pu.y, pu.color);
+                        
+                        if(pu.type === 'weapon') {
+                            if(player.weaponTier < 4) {
+                                player.weaponTier++;
+                                document.getElementById('tier-indicator').innerText = `WEAPON TIER: ${player.weaponTier}`;
+                            }
+                        } else {
+                            player.widthPowerUpTimer = 60 * 60; 
+                        }
+
+                        powerUps.splice(i, 1);
+                    }
+                }
+
+            } else {
+                         /* ========================================================= */
+                /* MENU ENGINE ACTIVE CLASH SYSTEM LAYER                     */
+                /* ========================================================= */
+                updateAndRenderMenuClash();
+            }
+
+            // Shared Universal Particle Flare Renderer
+            for(let i = particles.length - 1; i >= 0; i--) {
+                let pt = particles[i];
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.alpha -= 0.02;
+                if(pt.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.globalAlpha = pt.alpha;
+                ctx.fillStyle = pt.color;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            requestAnimationFrame(globalEngineLoop);
+        }
+
+        // Initialize setup elements and run continuous animation pipelines
+        resizeCanvas();
+        requestAnimationFrame(globalEngineLoop);
+    </script>
+</body>
+</html>

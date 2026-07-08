@@ -1,0 +1,16 @@
+{
+  "name": "Loner Kill",
+  "short_name": "Loner Kill",
+  "start_url": "index.html",
+  "display": "fullscreen",
+  "background_color": "#020208",
+  "theme_color": "#020208",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
