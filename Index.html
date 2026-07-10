@@ -170,7 +170,17 @@
             flex-direction: column;
             gap: 10px;
             margin: 14px 0;
+            max-height: 48vh;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            padding-right: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0,255,255,0.35) rgba(255,255,255,0.05);
         }
+        .shop-list::-webkit-scrollbar { width: 6px; }
+        .shop-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+        .shop-list::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.35); border-radius: 3px; }
         .shop-item {
             background: rgba(10, 15, 30, 0.7);
             border: 1px solid rgba(0, 255, 255, 0.15);
@@ -210,6 +220,41 @@
         }
         .shop-btn.equipped-btn {
             background: linear-gradient(135deg, #00ffcc, #00aa66);
+        }
+
+        .btn-start:disabled {
+            opacity: 0.35;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .shop-section-heading {
+            width: 100%;
+            max-width: 340px;
+            text-align: left;
+            color: #a0a5ff;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 12px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .skin-swatch {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.3);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5) inset;
+        }
+
+        .shop-item-info { flex: 1; }
+
+        #shield-indicator {
+            color: #00e5ff;
+            font-size: 12px;
+            margin-top: 4px;
         }
 
         /* Tiny Home Page Tag Signature Styling */
@@ -262,6 +307,7 @@
             <div class="lives-indicator" id="lives-val" style="margin-top: 4px;">❤️❤️❤️</div>
             <div id="width-timer" class="powerup-timer hidden">WIDER SHIP: 60s</div>
             <div id="rocket-timer" class="powerup-timer hidden" style="color:#ff6600;">🚀 ROCKET</div>
+            <div id="shield-indicator" class="hidden">🛡️ <span id="shield-val">0</span>/<span id="shield-max">0</span></div>
         </div>
     </div>
 
@@ -304,6 +350,7 @@
         <p style="color: #a0a5ff;">Final Battle Record: <span id="final-score" style="font-weight:bold; color:#00ffcc;">0</span></p>
         <p style="color: #ffcc00; font-weight:bold;" id="go-coins">+0 🪙</p>
         <p id="go-cause" class="stats-line hidden"></p>
+        <button class="btn-start hidden" id="save-me-btn" style="background: linear-gradient(135deg, #00ffaa, #00cc66); box-shadow: 0 0 25px rgba(0,255,170,0.4); color:#012b1a;" onclick="useSaveMe()">Save Me (10 🪙)</button>
         <button class="btn-start" style="background: linear-gradient(135deg, #ff3366, #ff0055); box-shadow: 0 0 25px rgba(255,51,102,0.4);" onclick="retryGame()">Respawn Fleet</button>
         <button class="btn-back" onclick="backToMenu()">Menu</button>
     </div>
@@ -377,6 +424,46 @@
         const PRICE_LIFE_INCREMENT = 5000;
         function nextLifePrice() { return PRICE_LIFE_BASE + PRICE_LIFE_INCREMENT * extraLivesOwned; }
 
+        // Save Me - Continue System (resets every new run, capped at 3 uses)
+        let saveMeUsesThisRun = 0;
+        const MAX_SAVE_ME = 3;
+        const SAVE_ME_BASE_COST = 10;
+        function getSaveMeCost() { return SAVE_ME_BASE_COST * Math.pow(2, saveMeUsesThisRun); }
+
+        // Hull Durability - shop upgrade, Mission/Mega only. Each level lets the ship
+        // absorb one enemy bullet per life before it costs a life.
+        let ownedDurability = 0; // 0-3
+        const MAX_DURABILITY = 3;
+        const PRICE_DURABILITY_BASE = 1000;
+        const PRICE_DURABILITY_MULT = 5;
+        function nextDurabilityPrice() { return PRICE_DURABILITY_BASE * Math.pow(PRICE_DURABILITY_MULT, ownedDurability); }
+
+        // Ship Skins (cosmetic hull recolors, inspired by real Starship launch photography)
+        const PRICE_SKIN = 2000;
+        let ownedSkins = [true, false, false, false, false, false]; // index 0 = default hull, always owned
+        let skinEquipped = 0;
+
+        // Auto-Turret - floor-mounted mid-screen emplacement, fires on its own during any run.
+        // 0 = not owned. 1-4 = owned, currently firing that many bullets per volley.
+        let turretLevel = 0;
+        const MAX_TURRET_LEVEL = 4;
+        const PRICE_TURRET_BASE = 5000;
+        function turretUpgradePrice() {
+            if (turretLevel <= 0) return PRICE_TURRET_BASE;
+            return PRICE_TURRET_BASE * Math.pow(2, turretLevel);
+        }
+        let turretLasers = [];
+        let turretFireTimer = 0;
+        const TURRET_FIRE_RATE = 22; // frames between turret volleys
+        const SKINS = [
+            null, // 0: default look, handled natively by PlayerShip.draw()
+            { name: 'Polished Chrome', desc: 'Mirror-bright plating with ice-blue running lights.', hull:'#c9ced8', stroke:'#ffffff', shadow:'#aad4ff', light:'#88e0ff', flameA:'#66ccff', flameB:'#ffffff', swatch:'linear-gradient(135deg, #c9ced8, #6fa8ff)' },
+            { name: 'Old Glory', desc: 'Navy-blue hull trimmed in red, white and blue.', hull:'#1c2a54', stroke:'#ff3344', shadow:'#4488ff', light:'#ffffff', flameA:'#ff3344', flameB:'#3366ff', swatch:'linear-gradient(135deg, #1c2a54, #ff3344)' },
+            { name: 'Solar Flare', desc: 'Scorched bronze plating that glows like liftoff fire.', hull:'#3a1f0a', stroke:'#ff8800', shadow:'#ff5500', light:'#ffaa33', flameA:'#ffcc00', flameB:'#ff3300', swatch:'linear-gradient(135deg, #3a1f0a, #ff8800)' },
+            { name: 'Ion Drift', desc: 'Deep-space purple hull wrapped in a violet ion glow.', hull:'#241b3a', stroke:'#a866ff', shadow:'#6644ff', light:'#cc99ff', flameA:'#8866ff', flameB:'#00ffff', swatch:'linear-gradient(135deg, #241b3a, #a866ff)' },
+            { name: 'Night Phoenix', desc: 'Stealth-black plating that erupts in molten orange fire.', hull:'#111318', stroke:'#ff3300', shadow:'#ff4400', light:'#ff6633', flameA:'#ff2200', flameB:'#ffaa00', swatch:'linear-gradient(135deg, #111318, #ff4400)' }
+        ];
+
         // Rocket Power-up State - simple 5-second free-fire window
         let rocketBullets = [];
         let rocketActive = false;
@@ -433,6 +520,13 @@
                     equippedBullet = data.equippedBullet || 1;
                     sizeEquipped = !!data.sizeEquipped;
                     extraLivesOwned = data.extraLivesOwned || 0;
+                    ownedDurability = data.ownedDurability || 0;
+                    if (Array.isArray(data.ownedSkins) && data.ownedSkins.length === ownedSkins.length) {
+                        ownedSkins = data.ownedSkins;
+                    }
+                    ownedSkins[0] = true; // default hull is always owned
+                    skinEquipped = data.skinEquipped || 0;
+                    turretLevel = data.turretLevel || 0;
                 }
             } catch (e) { /* storage unavailable, defaults stand */ }
         }
@@ -441,7 +535,8 @@
             try {
                 localStorage.setItem('lonerKillProgress', JSON.stringify({
                     unlockedLevel, bestScore, missionComplete, unlockedMegaLevel,
-                    coins, ownedBullet2, ownedBullet4, ownedSize, equippedBullet, sizeEquipped, extraLivesOwned
+                    coins, ownedBullet2, ownedBullet4, ownedSize, equippedBullet, sizeEquipped, extraLivesOwned,
+                    ownedDurability, ownedSkins, skinEquipped, turretLevel
                 }));
             } catch (e) { /* storage unavailable */ }
         }
@@ -509,7 +604,10 @@
                 this.targetY = this.y;
                 
                 this.permanentWide = false; // set true if Wide Hull is equipped from the shop
-                this.widthPowerUpTimer = 0; 
+                this.widthPowerUpTimer = 0;
+
+                this.shieldCharges = 0;    // remaining bullet-absorbs from Hull Durability upgrade
+                this.maxShieldCharges = 0; // set at run start, Mission/Mega only
 
                 // Small scattered lit windows across the hull (dark-ship, lit-panel look)
                 this.hullLights = [];
@@ -561,11 +659,20 @@
                 ctx.save();
                 ctx.translate(this.x + this.width/2, this.y + this.height/2);
 
-                // Dark gunmetal hull with a warm amber glow, evoking a gritty capital-ship mood
+                const skin = SKINS[skinEquipped] || null;
+                const hullFill = skin ? skin.hull : '#2b2f3a';
+                const hullStroke = skin ? skin.stroke : '#ffaa33';
+                const shadowColor = skin ? skin.shadow : '#ffaa33';
+                const lightOnColor = skin ? skin.light : '#ffdd88';
+                const flameA = skin ? skin.flameA : '#ff3300';
+                const flameB = skin ? skin.flameB : '#ffaa00';
+                const seamStroke = skin ? skin.stroke : 'rgba(255,170,51,0.35)';
+
+                // Hull plating - color scheme swaps with the equipped skin
                 ctx.shadowBlur = 10;
-                ctx.shadowColor = '#ffaa33';
-                ctx.fillStyle = '#2b2f3a';
-                ctx.strokeStyle = '#ffaa33';
+                ctx.shadowColor = shadowColor;
+                ctx.fillStyle = hullFill;
+                ctx.strokeStyle = hullStroke;
                 ctx.lineWidth = 1.8;
 
                 ctx.beginPath();
@@ -582,7 +689,8 @@
 
                 // Angular panel seams for a plated, industrial look
                 ctx.shadowBlur = 0;
-                ctx.strokeStyle = 'rgba(255,170,51,0.35)';
+                ctx.strokeStyle = seamStroke;
+                ctx.globalAlpha = skin ? 0.4 : 1;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(0, -this.height/2);
@@ -590,26 +698,39 @@
                 ctx.moveTo(-this.width/4, -this.height/8);
                 ctx.lineTo(this.width/4, -this.height/8);
                 ctx.stroke();
+                ctx.globalAlpha = 1;
 
                 // Scattered lit windows across the hull, like a lit-up capital ship at night
                 ctx.shadowBlur = 4;
-                ctx.shadowColor = '#ffcc66';
+                ctx.shadowColor = lightOnColor;
                 for (let i = 0; i < this.hullLights.length; i++) {
                     const lt = this.hullLights[i];
-                    ctx.fillStyle = lt.on ? '#ffdd88' : '#553311';
+                    ctx.fillStyle = lt.on ? lightOnColor : '#553311';
                     ctx.fillRect(lt.x * this.width, lt.y * this.height, 2, 2);
                 }
 
                 // Engine flame trail
                 ctx.shadowBlur = 12;
-                ctx.fillStyle = Math.random() > 0.5 ? '#ff3300' : '#ffaa00';
-                ctx.shadowColor = '#ff3300';
+                ctx.fillStyle = Math.random() > 0.5 ? flameA : flameB;
+                ctx.shadowColor = flameA;
                 ctx.beginPath();
                 ctx.moveTo(-6, this.height/4);
                 ctx.lineTo(0, this.height/2 + (Math.random()*8));
                 ctx.lineTo(6, this.height/4);
                 ctx.closePath();
                 ctx.fill();
+
+                // Shield shimmer overlay while a hull-durability charge is still available
+                if (this.shieldCharges > 0) {
+                    ctx.shadowBlur = 0;
+                    ctx.globalAlpha = 0.35 + Math.random() * 0.15;
+                    ctx.strokeStyle = '#00e5ff';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.width * 0.62, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
 
                 ctx.restore();
             }
@@ -1037,6 +1158,27 @@
             }
         }
 
+        // Auto-Turret bolt - fired automatically by the floor-mounted turret, independent of the player's own guns
+        class TurretBolt {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 3;
+                this.height = 16;
+                this.dy = -14;
+            }
+
+            update() { this.y += this.dy; }
+
+            draw() {
+                ctx.fillStyle = '#ff8800';
+                ctx.globalAlpha = 0.35;
+                ctx.fillRect(this.x - 1.5, this.y - 1.5, this.width + 3, this.height + 3);
+                ctx.globalAlpha = 1;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
         // ==========================================
         // SYSTEM OPERATIONAL EVENT FUNCTIONS
         // ==========================================
@@ -1061,6 +1203,53 @@
             } else {
                 playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
             }
+        }
+
+        // ==========================================
+        // AUTO-TURRET - shop upgrade, floor-mounted at mid-screen, fires on its own
+        // ==========================================
+        function fireTurretLaser() {
+            if (turretLevel <= 0) return;
+            const tx = canvas.width / 2;
+            const ty = canvas.height - 40;
+            const count = turretLevel;
+            const spacing = 10;
+            const startOffset = -((count - 1) * spacing) / 2;
+            for (let i = 0; i < count; i++) {
+                turretLasers.push(new TurretBolt(tx + startOffset + i * spacing, ty));
+            }
+        }
+
+        function drawTurret() {
+            if (turretLevel <= 0) return;
+            const tx = canvas.width / 2;
+            const ty = canvas.height - 26;
+            ctx.save();
+            ctx.translate(tx, ty);
+
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#00e5ff';
+            ctx.fillStyle = '#3a3f4d';
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-17, 14);
+            ctx.lineTo(17, 14);
+            ctx.lineTo(12, -5);
+            ctx.lineTo(-12, -5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#8f9bb3';
+            const barrelSpacing = 8;
+            const startX = -((turretLevel - 1) * barrelSpacing) / 2;
+            for (let i = 0; i < turretLevel; i++) {
+                ctx.fillRect(startX + i * barrelSpacing - 1.5, -24, 3, 20);
+            }
+
+            ctx.restore();
         }
 
         function updateBulletHUD() {
@@ -1486,28 +1675,137 @@ function updateAndRenderMenuClash() {
                 }
             }));
 
-            const lifeItem = document.createElement('div');
-            lifeItem.className = 'shop-item';
-            const lifeInfo = document.createElement('div');
-            lifeInfo.className = 'shop-item-info';
-            lifeInfo.innerHTML = `<div class="shop-item-name">Extra Life (Endless Mode)</div><div class="shop-item-desc">Owned: +${extraLivesOwned} life${extraLivesOwned === 1 ? '' : 's'}. Stackable — next one costs more.</div>`;
-            lifeItem.appendChild(lifeInfo);
-            const lifeBtn = document.createElement('button');
-            lifeBtn.className = 'shop-btn';
-            const price = nextLifePrice();
-            lifeBtn.innerText = `Buy (${price})`;
-            lifeBtn.disabled = coins < price;
-            lifeBtn.onclick = () => {
-                const p = nextLifePrice();
-                if (coins >= p) {
-                    coins -= p;
-                    extraLivesOwned++;
+            // Hull Durability - Mission/Mega only, stacks up to 3 shield charges
+            const durHeading = document.createElement('div');
+            durHeading.className = 'shop-section-heading';
+            durHeading.innerText = 'Hull Durability — Mission & Mega Only';
+            container.appendChild(durHeading);
+
+            const durItem = document.createElement('div');
+            durItem.className = 'shop-item';
+            const durInfo = document.createElement('div');
+            durInfo.className = 'shop-item-info';
+            durInfo.innerHTML = `<div class="shop-item-name">Durability Level ${ownedDurability}/${MAX_DURABILITY}</div><div class="shop-item-desc">Each level lets your ship shrug off one enemy bullet per life before it costs you a life. Recharges every time you respawn.</div>`;
+            durItem.appendChild(durInfo);
+            const durBtn = document.createElement('button');
+            durBtn.className = 'shop-btn';
+            if (ownedDurability >= MAX_DURABILITY) {
+                durBtn.innerText = 'Maxed';
+                durBtn.disabled = true;
+            } else {
+                const dPrice = nextDurabilityPrice();
+                durBtn.innerText = `Upgrade (${dPrice})`;
+                durBtn.disabled = coins < dPrice;
+                durBtn.onclick = () => {
+                    const p = nextDurabilityPrice();
+                    if (ownedDurability < MAX_DURABILITY && coins >= p) {
+                        coins -= p;
+                        ownedDurability++;
+                        saveProgress();
+                        renderShop();
+                    }
+                };
+            }
+            durItem.appendChild(durBtn);
+            container.appendChild(durItem);
+
+            // Auto-Turret - floor-mounted mid-screen gun, buy then upgrade for more barrels
+            const turretHeading = document.createElement('div');
+            turretHeading.className = 'shop-section-heading';
+            turretHeading.innerText = 'Auto-Turret';
+            container.appendChild(turretHeading);
+
+            const turretItem = document.createElement('div');
+            turretItem.className = 'shop-item';
+            const turretInfo = document.createElement('div');
+            turretInfo.className = 'shop-item-info';
+            if (turretLevel <= 0) {
+                turretInfo.innerHTML = `<div class="shop-item-name">Auto-Turret</div><div class="shop-item-desc">A machine gun anchored to the floor, dead center. Fires on its own in every run — no aiming needed. Starts at 1 bullet per volley.</div>`;
+            } else {
+                turretInfo.innerHTML = `<div class="shop-item-name">Auto-Turret — Lv.${turretLevel}/${MAX_TURRET_LEVEL}</div><div class="shop-item-desc">Firing ${turretLevel} bullet${turretLevel === 1 ? '' : 's'} per volley.${turretLevel < MAX_TURRET_LEVEL ? ' Upgrade for more barrels.' : ' Fully upgraded.'}</div>`;
+            }
+            turretItem.appendChild(turretInfo);
+            const turretBtn = document.createElement('button');
+            turretBtn.className = 'shop-btn';
+            if (turretLevel >= MAX_TURRET_LEVEL) {
+                turretBtn.innerText = 'Maxed';
+                turretBtn.disabled = true;
+            } else {
+                const tPrice = turretUpgradePrice();
+                turretBtn.innerText = turretLevel <= 0 ? `Buy (${tPrice})` : `Upgrade (${tPrice})`;
+                turretBtn.disabled = coins < tPrice;
+                turretBtn.onclick = () => {
+                    const p = turretUpgradePrice();
+                    if (turretLevel < MAX_TURRET_LEVEL && coins >= p) {
+                        coins -= p;
+                        turretLevel++;
+                        saveProgress();
+                        renderShop();
+                    }
+                };
+            }
+            turretItem.appendChild(turretBtn);
+            container.appendChild(turretItem);
+
+            // Ship Skins - cosmetic hull recolors
+            const skinHeading = document.createElement('div');
+            skinHeading.className = 'shop-section-heading';
+            skinHeading.innerText = 'Ship Skins';
+            container.appendChild(skinHeading);
+
+            for (let s = 0; s < SKINS.length; s++) {
+                container.appendChild(buildSkinItem(s));
+            }
+        }
+
+        function buildSkinItem(index) {
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+
+            const swatch = document.createElement('div');
+            swatch.className = 'skin-swatch';
+            swatch.style.background = index === 0
+                ? 'linear-gradient(135deg, #2b2f3a, #ffaa33)'
+                : SKINS[index].swatch;
+            div.appendChild(swatch);
+
+            const info = document.createElement('div');
+            info.className = 'shop-item-info';
+            const name = index === 0 ? 'Default Hull' : SKINS[index].name;
+            const desc = index === 0 ? 'The classic gunmetal-and-amber battleship look. Always free.' : SKINS[index].desc;
+            info.innerHTML = `<div class="shop-item-name">${name}</div><div class="shop-item-desc">${desc}</div>`;
+            div.appendChild(info);
+
+            const btn = document.createElement('button');
+            btn.className = 'shop-btn';
+            const owned = ownedSkins[index];
+            const equipped = skinEquipped === index;
+
+            if (equipped) {
+                btn.innerText = 'Equipped ✓';
+                btn.classList.add('equipped-btn');
+                btn.disabled = true;
+            } else if (owned) {
+                btn.innerText = 'Equip';
+                btn.onclick = () => {
+                    skinEquipped = index;
                     saveProgress();
                     renderShop();
-                }
-            };
-            lifeItem.appendChild(lifeBtn);
-            container.appendChild(lifeItem);
+                };
+            } else {
+                btn.innerText = `Buy (${PRICE_SKIN})`;
+                btn.disabled = coins < PRICE_SKIN;
+                btn.onclick = () => {
+                    if (coins >= PRICE_SKIN && !ownedSkins[index]) {
+                        coins -= PRICE_SKIN;
+                        ownedSkins[index] = true;
+                        saveProgress();
+                        renderShop();
+                    }
+                };
+            }
+            div.appendChild(btn);
+            return div;
         }
 
         function showModeSelect() {
@@ -1627,6 +1925,69 @@ function updateAndRenderMenuClash() {
             document.getElementById('lives-val').innerText = lifeIcons || '☠️';
         }
 
+        function updateShieldHUD() {
+            const el = document.getElementById('shield-indicator');
+            if (player && player.maxShieldCharges > 0) {
+                el.classList.remove('hidden');
+                document.getElementById('shield-val').innerText = player.shieldCharges;
+                document.getElementById('shield-max').innerText = player.maxShieldCharges;
+            } else {
+                el.classList.add('hidden');
+            }
+        }
+
+        function updateSaveMeButtonUI() {
+            const btn = document.getElementById('save-me-btn');
+            if (!btn) return;
+            const isMissionLike = (gameMode === 'mission' || gameMode === 'mega');
+            if (!isMissionLike) {
+                btn.classList.add('hidden');
+                return;
+            }
+            btn.classList.remove('hidden');
+            if (saveMeUsesThisRun >= MAX_SAVE_ME) {
+                btn.innerText = 'Save Me (Used Up)';
+                btn.disabled = true;
+            } else {
+                const cost = getSaveMeCost();
+                btn.innerText = `Save Me (${cost} 🪙)`;
+                btn.disabled = coins < cost;
+            }
+        }
+
+        function useSaveMe() {
+            const isMissionLike = (gameMode === 'mission' || gameMode === 'mega');
+            if (!isMissionLike) return;
+            if (saveMeUsesThisRun >= MAX_SAVE_ME) return;
+            const cost = getSaveMeCost();
+            if (coins < cost) return;
+
+            coins -= cost;
+            saveMeUsesThisRun++;
+            document.getElementById('coin-val').innerText = coins;
+            saveProgress();
+
+            // Clear the threats that were on screen at the moment of death so the
+            // revived ship gets a clean breath before the action resumes.
+            enemyLasers = [];
+            fallingHazards = [];
+
+            lives = 1;
+            renderLives();
+            document.getElementById('go-cause').classList.add('hidden');
+            hideAllScreens();
+            document.getElementById('pause-btn').classList.remove('hidden');
+
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height - 120;
+            player.targetX = player.x;
+            player.targetY = player.y;
+            player.shieldCharges = player.maxShieldCharges;
+            updateShieldHUD();
+
+            gameRunning = true;
+        }
+
         function retryGame() {
             startGame(gameMode, missionLevel);
         }
@@ -1734,6 +2095,8 @@ function updateAndRenderMenuClash() {
             rocketTimer = 0;
             bulletBoostMode = 0;
             bulletBoostTimer = 0;
+            turretLasers = [];
+            turretFireTimer = 0;
             document.getElementById('rocket-timer').classList.add('hidden');
             
             document.getElementById('score-val').innerText = score;
@@ -1750,6 +2113,14 @@ function updateAndRenderMenuClash() {
                 player.permanentWide = true;
                 player.width = player.baseWidth * 1.6;
             }
+            // Hull Durability upgrade only grants shield charges in Mission/Mega modes
+            player.maxShieldCharges = (isMissionLike && ownedDurability > 0) ? ownedDurability : 0;
+            player.shieldCharges = player.maxShieldCharges;
+            updateShieldHUD();
+
+            saveMeUsesThisRun = 0;
+            updateSaveMeButtonUI();
+
             updateBulletHUD();
             resizeCanvas();
             
@@ -1781,6 +2152,8 @@ function updateAndRenderMenuClash() {
                 player.y = canvas.height - 120;
                 player.targetX = player.x;
                 player.targetY = player.y;
+                player.shieldCharges = player.maxShieldCharges; // fresh shield charge with each new life
+                updateShieldHUD();
             }
         }
 
@@ -1821,6 +2194,7 @@ function updateAndRenderMenuClash() {
             } else {
                 causeEl.classList.add('hidden');
             }
+            updateSaveMeButtonUI();
             document.getElementById('pause-btn').classList.add('hidden');
             hideAllScreens();
             document.getElementById('game-over-screen').classList.remove('hidden');
@@ -1856,11 +2230,20 @@ function updateAndRenderMenuClash() {
                 /* ========================================================= */
                 player.update();
                 player.draw();
+                drawTurret();
 
                 playerFireTimer++;
                 if(playerFireTimer >= 8) { 
                     playerFireTimer = 0;
                     firePlayerLaser();
+                }
+
+                if (turretLevel > 0) {
+                    turretFireTimer++;
+                    if (turretFireTimer >= TURRET_FIRE_RATE) {
+                        turretFireTimer = 0;
+                        fireTurretLaser();
+                    }
                 }
 
                 spawnWave();
@@ -1920,6 +2303,69 @@ function updateAndRenderMenuClash() {
                             playerLasers.splice(i, 1);
                             ss.hp--;
                             triggerDebris(pl.x, pl.y, '#ffaa00');
+                            if(ss.hp <= 0) {
+                                triggerDebris(ss.x + ss.width/2, ss.y + ss.height/2, ss.color, 20);
+                                score += 30;
+                                document.getElementById('score-val').innerText = score;
+                                suicideShips.splice(k, 1);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // Process Turret Lasers - fired automatically by the floor-mounted auto-turret
+                for(let i = turretLasers.length - 1; i >= 0; i--) {
+                    let tl = turretLasers[i];
+                    tl.update();
+                    tl.draw();
+
+                    if(tl.y < -20) {
+                        turretLasers.splice(i, 1);
+                        continue;
+                    }
+
+                    let turretHit = false;
+
+                    for(let j = enemies.length - 1; j >= 0; j--) {
+                        let en = enemies[j];
+                        if(tl.x > en.x && tl.x < en.x + en.width && tl.y > en.y && tl.y < en.y + en.height) {
+                            turretLasers.splice(i, 1);
+                            turretHit = true;
+                            en.hp--;
+                            triggerDebris(tl.x, tl.y, '#ff8800');
+
+                            if(en.hp <= 0) {
+                                enemies.splice(j, 1);
+                                onEnemyDefeated(en);
+                            }
+                            break;
+                        }
+                    }
+
+                    if(turretHit) continue;
+
+                    for(let k = fallingHazards.length - 1; k >= 0; k--) {
+                        let fh = fallingHazards[k];
+                        if(tl.x > fh.x && tl.x < fh.x + fh.width && tl.y > fh.y && tl.y < fh.y + fh.height) {
+                            turretLasers.splice(i, 1);
+                            turretHit = true;
+                            triggerDebris(tl.x, tl.y, '#ff8800');
+                            fallingHazards.splice(k, 1);
+                            score += 15;
+                            document.getElementById('score-val').innerText = score;
+                            break;
+                        }
+                    }
+
+                    if(turretHit) continue;
+
+                    for(let k = suicideShips.length - 1; k >= 0; k--) {
+                        let ss = suicideShips[k];
+                        if(tl.x > ss.x && tl.x < ss.x + ss.width && tl.y > ss.y && tl.y < ss.y + ss.height) {
+                            turretLasers.splice(i, 1);
+                            ss.hp--;
+                            triggerDebris(tl.x, tl.y, '#ffaa00');
                             if(ss.hp <= 0) {
                                 triggerDebris(ss.x + ss.width/2, ss.y + ss.height/2, ss.color, 20);
                                 score += 30;
@@ -2009,7 +2455,13 @@ function updateAndRenderMenuClash() {
 
                     if(el.x > player.x && el.x < player.x + player.width && el.y > player.y && el.y < player.y + player.height) {
                         enemyLasers.splice(i, 1);
-                        handlePlayerDeath();
+                        if (player.shieldCharges > 0) {
+                            player.shieldCharges--;
+                            triggerDebris(el.x, el.y, '#00e5ff', 12);
+                            updateShieldHUD();
+                        } else {
+                            handlePlayerDeath();
+                        }
                     }
                 }
 
