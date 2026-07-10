@@ -74,6 +74,7 @@
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             padding: 20px;
+            overflow-y: auto;
         }
 
         .game-title {
@@ -162,6 +163,55 @@
             cursor: not-allowed;
         }
 
+        .shop-list {
+            width: 100%;
+            max-width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 14px 0;
+        }
+        .shop-item {
+            background: rgba(10, 15, 30, 0.7);
+            border: 1px solid rgba(0, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+        }
+        .shop-item-name {
+            font-size: 14px;
+            font-weight: bold;
+            color: #e2e8f0;
+        }
+        .shop-item-desc {
+            font-size: 11px;
+            color: #7f8ca3;
+            margin-top: 3px;
+        }
+        .shop-btn {
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #00f2fe, #4facfe);
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .shop-btn:disabled {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.35);
+            cursor: not-allowed;
+        }
+        .shop-btn.equipped-btn {
+            background: linear-gradient(135deg, #00ffcc, #00aa66);
+        }
+
         /* Tiny Home Page Tag Signature Styling */
         .brand-tag {
             position: absolute;
@@ -204,11 +254,12 @@
     <div class="hud-container">
         <div class="hud-panel">
             <div class="score-indicator">SCORE: <span id="score-val">0</span></div>
-            <div id="tier-indicator" style="color: #a0a5ff; font-size: 11px; margin-top: 2px;">WEAPON TIER: 1</div>
+            <div id="tier-indicator" style="color: #a0a5ff; font-size: 11px; margin-top: 2px;">BULLETS: x1</div>
             <div id="mode-indicator" class="mode-indicator"></div>
         </div>
         <div class="hud-panel" style="text-align: right;">
-            <div class="lives-indicator" id="lives-val">❤️❤️❤️</div>
+            <div style="color: #ffcc00; font-size: 14px; font-weight: bold;">🪙 <span id="coin-val">0</span></div>
+            <div class="lives-indicator" id="lives-val" style="margin-top: 4px;">❤️❤️❤️</div>
             <div id="width-timer" class="powerup-timer hidden">WIDER SHIP: 60s</div>
             <div id="rocket-timer" class="powerup-timer hidden" style="color:#ff6600;">🚀 ROCKET</div>
         </div>
@@ -220,6 +271,7 @@
             Drag anywhere to fly your battleship in all directions. Intercept gifts to transform your weaponry and survive the flagship bosses across 10 mission levels, test your limits in Endless Mode, or unlock the super-chaotic Mega Level campaign!
         </p>
         <button class="btn-start" onclick="showModeSelect()">Play</button>
+        <button class="btn-start" style="background: linear-gradient(135deg, #ffcc00, #ffaa00); box-shadow: 0 0 25px rgba(255,204,0,0.4); color:#1a1200;" onclick="showShop()">Shop</button>
         <div class="stats-line" id="menu-stats"></div>
         <div class="brand-tag">by loner</div>
     </div>
@@ -250,6 +302,7 @@
     <div id="game-over-screen" class="ui-screen hidden">
         <h1 class="game-title" style="background: linear-gradient(180deg, #ff3366 0%, #990022 100%); -webkit-background-clip: text;">FLEET DESTROYED</h1>
         <p style="color: #a0a5ff;">Final Battle Record: <span id="final-score" style="font-weight:bold; color:#00ffcc;">0</span></p>
+        <p style="color: #ffcc00; font-weight:bold;" id="go-coins">+0 🪙</p>
         <p id="go-cause" class="stats-line hidden"></p>
         <button class="btn-start" style="background: linear-gradient(135deg, #ff3366, #ff0055); box-shadow: 0 0 25px rgba(255,51,102,0.4);" onclick="retryGame()">Respawn Fleet</button>
         <button class="btn-back" onclick="backToMenu()">Menu</button>
@@ -258,6 +311,7 @@
     <div id="level-complete-screen" class="ui-screen hidden">
         <h1 class="game-title" id="lc-heading" style="background: linear-gradient(180deg, #00ffcc 0%, #00aa66 100%); -webkit-background-clip: text;">LEVEL CLEARED</h1>
         <p style="color: #a0a5ff;">Score: <span id="lc-score" style="font-weight:bold; color:#00ffcc;">0</span></p>
+        <p style="color: #ffcc00; font-weight:bold;" id="lc-coins">+0 🪙</p>
         <button class="btn-start" id="lc-next-btn" onclick="nextLevel()">Next Level</button>
         <button class="btn-back" onclick="backToMenu()">Menu</button>
     </div>
@@ -267,6 +321,13 @@
         <p class="stats-line" id="pause-info"></p>
         <button class="btn-start" onclick="resumeGame()">Resume</button>
         <button class="btn-back" onclick="quitToMenu()">Quit to Menu</button>
+    </div>
+
+    <div id="shop-screen" class="ui-screen hidden" style="justify-content: flex-start; padding-top: 50px; overflow-y: auto;">
+        <h1 class="game-title" style="font-size: 28px;">SHOP</h1>
+        <p class="stats-line">Coins: <span id="shop-coins" style="color:#ffcc00; font-weight:bold;">0</span></p>
+        <div id="shop-items" class="shop-list"></div>
+        <button class="btn-back" onclick="backToMenu()">Back</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -300,13 +361,38 @@
         let missionComplete = false; // true once the original 10-level Mission is fully cleared
         let unlockedMegaLevel = 0;   // 0 = Mega Level track locked
 
-        // Rocket Power-up State
+        // Coins & Shop (persisted)
+        let coins = 0;
+        let ownedBullet2 = false;
+        let ownedBullet4 = false;
+        let ownedSize = false;
+        let equippedBullet = 1;      // 1, 2 or 4 - permanent baseline bullet count
+        let sizeEquipped = false;    // permanent wide hull, no countdown
+        let extraLivesOwned = 0;     // purchased extra lives, applied in Endless Mode
+
+        const PRICE_BULLET2 = 1000;
+        const PRICE_BULLET4 = 5000;
+        const PRICE_SIZE = 1500;
+        const PRICE_LIFE_BASE = 10000;
+        const PRICE_LIFE_INCREMENT = 5000;
+        function nextLifePrice() { return PRICE_LIFE_BASE + PRICE_LIFE_INCREMENT * extraLivesOwned; }
+
+        // Rocket Power-up State - simple 5-second free-fire window
         let rocketBullets = [];
-        let rocketActive = false;    // rocket-firing ability currently available
-        let rocketBulletsFired = 0;  // shots fired in the current rocket session
-        let rocketCountdown = 0;     // frames left of the 5s active window (starts after the 2nd shot)
-        let rocketLocked = false;    // true during the 30s lockout after the 3rd shot
-        let rocketLockTimer = 0;     // frames left of the 30s lockout
+        let rocketActive = false;
+        let rocketTimer = 0; // frames left of the 5s active window
+
+        // Bullet Gift Boost State (temporary, on top of the equipped baseline)
+        let bulletBoostMode = 0;   // 0 = none, else 2 or 4
+        let bulletBoostTimer = 0;  // frames left of the 30s boost
+        function getActiveBulletMode() {
+            if (bulletBoostTimer > 0) return Math.max(equippedBullet, bulletBoostMode);
+            return equippedBullet;
+        }
+
+        // Suicide (kamikaze) Ships - active from level 5 upward
+        let suicideShips = [];
+        let suicideSpawnTimer = 0;
 
         // Entities Trackers
         let player;
@@ -340,18 +426,28 @@
                     bestScore = data.bestScore || 0;
                     missionComplete = !!data.missionComplete;
                     unlockedMegaLevel = data.unlockedMegaLevel || (missionComplete ? 1 : 0);
+                    coins = data.coins || 0;
+                    ownedBullet2 = !!data.ownedBullet2;
+                    ownedBullet4 = !!data.ownedBullet4;
+                    ownedSize = !!data.ownedSize;
+                    equippedBullet = data.equippedBullet || 1;
+                    sizeEquipped = !!data.sizeEquipped;
+                    extraLivesOwned = data.extraLivesOwned || 0;
                 }
             } catch (e) { /* storage unavailable, defaults stand */ }
         }
 
         function saveProgress() {
             try {
-                localStorage.setItem('lonerKillProgress', JSON.stringify({ unlockedLevel, bestScore, missionComplete, unlockedMegaLevel }));
+                localStorage.setItem('lonerKillProgress', JSON.stringify({
+                    unlockedLevel, bestScore, missionComplete, unlockedMegaLevel,
+                    coins, ownedBullet2, ownedBullet4, ownedSize, equippedBullet, sizeEquipped, extraLivesOwned
+                }));
             } catch (e) { /* storage unavailable */ }
         }
 
         function updateMenuStats() {
-            let txt = `Best: ${bestScore}  •  Unlocked Level: ${unlockedLevel}/${MAX_MISSION_LEVEL}`;
+            let txt = `Best: ${bestScore}  •  Unlocked Level: ${unlockedLevel}/${MAX_MISSION_LEVEL}  •  Coins: ${coins}`;
             if (missionComplete) txt += `  •  Mega Level: ${unlockedMegaLevel}/${MAX_MEGA_LEVEL}`;
             document.getElementById('menu-stats').innerText = txt;
         }
@@ -398,8 +494,19 @@
                 this.targetX = this.x;
                 this.targetY = this.y;
                 
-                this.weaponTier = 1; 
+                this.permanentWide = false; // set true if Wide Hull is equipped from the shop
                 this.widthPowerUpTimer = 0; 
+
+                // Small scattered lit windows across the hull (dark-ship, lit-panel look)
+                this.hullLights = [];
+                for (let i = 0; i < 14; i++) {
+                    this.hullLights.push({
+                        x: -0.4 + Math.random() * 0.8,
+                        y: -0.35 + Math.random() * 0.7,
+                        on: Math.random() > 0.3,
+                        flickerClock: Math.floor(Math.random() * 40)
+                    });
+                }
             }
 
             update() {
@@ -419,8 +526,19 @@
                     document.getElementById('width-timer').innerText = `WIDER SHIP: ${Math.ceil(this.widthPowerUpTimer / 60)}s`;
                     
                     if (this.widthPowerUpTimer <= 0) {
-                        this.width = this.baseWidth;
+                        this.width = this.permanentWide ? this.baseWidth * 1.6 : this.baseWidth;
                         document.getElementById('width-timer').classList.add('hidden');
+                    }
+                } else if (this.permanentWide) {
+                    this.width = this.baseWidth * 1.6;
+                }
+
+                for (let i = 0; i < this.hullLights.length; i++) {
+                    const lt = this.hullLights[i];
+                    lt.flickerClock--;
+                    if (lt.flickerClock <= 0) {
+                        lt.on = Math.random() > 0.35;
+                        lt.flickerClock = 20 + Math.floor(Math.random() * 60);
                     }
                 }
             }
@@ -428,12 +546,13 @@
             draw() {
                 ctx.save();
                 ctx.translate(this.x + this.width/2, this.y + this.height/2);
-                
-                ctx.shadowBlur = 12;
-                ctx.shadowColor = '#00f2fe';
-                ctx.fillStyle = '#e2e8f0';
-                ctx.strokeStyle = '#00f2fe';
-                ctx.lineWidth = 2;
+
+                // Dark gunmetal hull with a warm amber glow, evoking a gritty capital-ship mood
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffaa33';
+                ctx.fillStyle = '#2b2f3a';
+                ctx.strokeStyle = '#ffaa33';
+                ctx.lineWidth = 1.8;
 
                 ctx.beginPath();
                 ctx.moveTo(0, -this.height/2);
@@ -447,6 +566,28 @@
                 ctx.fill();
                 ctx.stroke();
 
+                // Angular panel seams for a plated, industrial look
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(255,170,51,0.35)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height/2);
+                ctx.lineTo(0, this.height/4);
+                ctx.moveTo(-this.width/4, -this.height/8);
+                ctx.lineTo(this.width/4, -this.height/8);
+                ctx.stroke();
+
+                // Scattered lit windows across the hull, like a lit-up capital ship at night
+                ctx.shadowBlur = 4;
+                ctx.shadowColor = '#ffcc66';
+                for (let i = 0; i < this.hullLights.length; i++) {
+                    const lt = this.hullLights[i];
+                    ctx.fillStyle = lt.on ? '#ffdd88' : '#553311';
+                    ctx.fillRect(lt.x * this.width, lt.y * this.height, 2, 2);
+                }
+
+                // Engine flame trail
+                ctx.shadowBlur = 12;
                 ctx.fillStyle = Math.random() > 0.5 ? '#ff3300' : '#ffaa00';
                 ctx.shadowColor = '#ff3300';
                 ctx.beginPath();
@@ -688,6 +829,70 @@
             }
         }
 
+        // Kamikaze ship - homes toward the player and dives down to crash, active from level 5 upward
+        class SuicideShip {
+            constructor(x, level) {
+                this.width = 30;
+                this.height = 30;
+                this.x = x;
+                this.y = -40;
+                const lc = Math.min(level, 15);
+                this.hp = 2 + Math.floor(lc / 4);
+                this.maxHp = this.hp;
+                this.dy = 3 + lc * 0.25;
+                this.dx = 0;
+                this.turnSpeed = 0.12 + lc * 0.015;
+                this.maxDx = 3.5;
+                this.color = '#ff2200';
+            }
+
+            update() {
+                if (typeof player !== 'undefined' && player) {
+                    const targetDx = (player.x + player.width/2) - (this.x + this.width/2);
+                    this.dx += Math.sign(targetDx) * this.turnSpeed;
+                    if (this.dx > this.maxDx) this.dx = this.maxDx;
+                    if (this.dx < -this.maxDx) this.dx = -this.maxDx;
+                }
+                this.x += this.dx;
+                this.y += this.dy;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                const angle = Math.atan2(this.dy, this.dx) - Math.PI/2;
+                ctx.rotate(angle);
+
+                ctx.shadowBlur = 14;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ffaa00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height/2);
+                ctx.lineTo(this.width/2, this.height/2);
+                ctx.lineTo(0, this.height/3);
+                ctx.lineTo(-this.width/2, this.height/2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffaa00';
+                ctx.shadowColor = '#ffaa00';
+                ctx.beginPath();
+                ctx.ellipse(0, -this.height/2 - 4, 4, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(-this.width/2, -this.height/2 - 12, this.width, 4);
+                ctx.fillStyle = '#ff2200';
+                ctx.fillRect(-this.width/2, -this.height/2 - 12, this.width * (this.hp / this.maxHp), 4);
+
+                ctx.restore();
+            }
+        }
+
         class SpaceLaser {
             constructor(x, y, dy, isPlayer) {
                 this.x = x;
@@ -768,8 +973,15 @@
                 this.dy = 4.8; // faster falling gift
                 this.radius = 12;
                 const r = Math.random();
-                this.type = r < 0.15 ? 'rocket' : (r < 0.65 ? 'weapon' : 'length');
-                this.color = this.type === 'rocket' ? '#ff4400' : (this.type === 'weapon' ? '#ffcc00' : '#00ff7f');
+                // rocket 2% • bullet4 15% • bullet2 38% • length (size) 45%
+                if (r < 0.02) this.type = 'rocket';
+                else if (r < 0.17) this.type = 'bullet4';
+                else if (r < 0.55) this.type = 'bullet2';
+                else this.type = 'length';
+
+                this.color = this.type === 'rocket' ? '#ff4400' :
+                             this.type === 'bullet4' ? '#ff33cc' :
+                             this.type === 'bullet2' ? '#ffcc00' : '#00ff7f';
                 this.pulse = 0;
             }
 
@@ -802,7 +1014,8 @@
                 ctx.font = 'bold 9px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(this.type === 'weapon' ? 'W' : (this.type === 'rocket' ? 'R' : 'L'), 0, 0);
+                const label = this.type === 'rocket' ? 'R' : this.type === 'bullet4' ? '4' : this.type === 'bullet2' ? '2' : 'L';
+                ctx.fillText(label, 0, 0);
 
                 ctx.restore();
             }
@@ -815,83 +1028,71 @@
             const p = player;
             const laserSpeed = -13;
 
-            if (rocketActive && !rocketLocked) {
+            if (rocketActive) {
                 fireRocketBullet();
                 return;
             }
-            
-            if (p.weaponTier === 1) {
-                playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
-            } else if (p.weaponTier === 2) {
-                playerLasers.push(new SpaceLaser(p.x + 4, p.y + 10, laserSpeed, true));
-                playerLasers.push(new SpaceLaser(p.x + p.width - 7, p.y + 10, laserSpeed, true));
-            } else if (p.weaponTier === 3) {
-                playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
-                let lLeft = new SpaceLaser(p.x + 2, p.y + 12, laserSpeed, true); lLeft.dx = -1.5;
-                let lRight = new SpaceLaser(p.x + p.width - 5, p.y + 12, laserSpeed, true); lRight.dx = 1.5;
-                playerLasers.push(lLeft); playerLasers.push(lRight);
-            } else { 
+
+            const mode = getActiveBulletMode();
+            if (mode >= 4) {
                 playerLasers.push(new SpaceLaser(p.x, p.y + 12, laserSpeed, true));
                 playerLasers.push(new SpaceLaser(p.x + p.width/3, p.y, laserSpeed, true));
                 playerLasers.push(new SpaceLaser(p.x + (p.width/3 * 2) - 3, p.y, laserSpeed, true));
                 playerLasers.push(new SpaceLaser(p.x + p.width - 3, p.y + 12, laserSpeed, true));
+            } else if (mode >= 2) {
+                playerLasers.push(new SpaceLaser(p.x + 4, p.y + 10, laserSpeed, true));
+                playerLasers.push(new SpaceLaser(p.x + p.width - 7, p.y + 10, laserSpeed, true));
+            } else {
+                playerLasers.push(new SpaceLaser(p.x + p.width/2 - 1.5, p.y, laserSpeed, true));
             }
         }
 
+        function updateBulletHUD() {
+            const mode = getActiveBulletMode();
+            let label = `BULLETS: x${mode}`;
+            if (bulletBoostTimer > 0 && bulletBoostMode > equippedBullet) {
+                label += ` (${Math.ceil(bulletBoostTimer / 60)}s)`;
+            } else if (equippedBullet > 1) {
+                label += ' (EQUIPPED)';
+            }
+            document.getElementById('tier-indicator').innerText = label;
+        }
+
         // ==========================================
-        // ROCKET GIFT / AMMO-THROTTLE SYSTEM
+        // ROCKET GIFT SYSTEM - free-fire for 5 seconds, no ammo lock
         // ==========================================
         function activateRocketMode() {
-            if (rocketLocked) return; // can't reactivate while on the 30s cooldown
             rocketActive = true;
-            rocketBulletsFired = 0;
-            rocketCountdown = 0; // no clock until the 2nd shot is fired
+            rocketTimer = 5 * 60;
             updateRocketHUD();
         }
 
         function fireRocketBullet() {
             rocketBullets.push(new RocketBullet(player.x + player.width/2 - 3, player.y - 6));
-            rocketBulletsFired++;
-
-            if (rocketBulletsFired === 2) {
-                rocketCountdown = 5 * 60; // 5s countdown begins once you've fired 2 bullets
-            }
-            if (rocketBulletsFired >= 3) {
-                rocketLocked = true;
-                rocketLockTimer = 30 * 60; // 30s cooldown after the 3rd bullet
-                rocketActive = false;
-                rocketCountdown = 0;
-            }
-            updateRocketHUD();
         }
 
         function updateRocketState() {
-            if (rocketActive && rocketCountdown > 0) {
-                rocketCountdown--;
-                if (rocketCountdown <= 0) {
-                    rocketActive = false; // idle timeout - 5s ran out without a 3rd shot
+            if (rocketActive) {
+                rocketTimer--;
+                if (rocketTimer <= 0) {
+                    rocketActive = false;
                 }
             }
-            if (rocketLocked) {
-                rocketLockTimer--;
-                if (rocketLockTimer <= 0) {
-                    rocketLocked = false;
-                    rocketBulletsFired = 2; // drops back to two
+            if (bulletBoostTimer > 0) {
+                bulletBoostTimer--;
+                if (bulletBoostTimer <= 0) {
+                    bulletBoostMode = 0;
                 }
             }
             updateRocketHUD();
+            updateBulletHUD();
         }
 
         function updateRocketHUD() {
             const el = document.getElementById('rocket-timer');
             if (rocketActive) {
                 el.classList.remove('hidden');
-                el.innerText = rocketCountdown > 0
-                    ? `🚀 ROCKET: ${Math.ceil(rocketCountdown / 60)}s`
-                    : `🚀 ROCKET ARMED (${rocketBulletsFired}/2)`;
-            } else if (rocketLocked) {
-                el.classList.remove('hidden');
-                el.innerText = `🚀 COOLDOWN: ${Math.ceil(rocketLockTimer / 60)}s`;
+                el.innerText = `🚀 ROCKET: ${Math.ceil(rocketTimer / 60)}s`;
             } else {
                 el.classList.add('hidden');
             }
@@ -934,6 +1135,13 @@
                 if (hazardSpawnTimer >= hazardInterval) {
                     hazardSpawnTimer = 0;
                     fallingHazards.push(new FallingHazard(Math.random() * canvas.width, level));
+                }
+
+                suicideSpawnTimer++;
+                const suicideInterval = Math.max(90, 220 - (level - 5) * 10);
+                if (suicideSpawnTimer >= suicideInterval) {
+                    suicideSpawnTimer = 0;
+                    suicideShips.push(new SuicideShip(Math.random() * canvas.width, level));
                 }
             }
         }
@@ -1027,12 +1235,20 @@
             if (en.isLevelBoss) bossActive = false;
             if ((gameMode === 'mission' || gameMode === 'mega') && !en.isLevelBoss) missionKills++;
 
-            if (Math.random() < 0.20 || en.isBoss) {
+            // Gift drop rate raised to 45%; bosses still guarantee a drop
+            if (Math.random() < 0.45 || en.isBoss) {
                 powerUps.push(new GiftPackage(en.x + en.width/2, en.y + en.height));
             }
 
-            if (en.isLevelBoss && (gameMode === 'mission' || gameMode === 'mega')) {
-                handleLevelClear();
+            if (en.isLevelBoss) {
+                if (gameMode === 'endless') {
+                    const reward = bossCount <= 5 ? 50 : 50 + (bossCount - 5) * 10;
+                    coins += reward;
+                    document.getElementById('coin-val').innerText = coins;
+                    saveProgress();
+                } else if (gameMode === 'mission' || gameMode === 'mega') {
+                    handleLevelClear();
+                }
             }
         }
 
@@ -1152,9 +1368,130 @@ function updateAndRenderMenuClash() {
         // NAVIGATION / SCREEN FLOW
         // ==========================================
         function hideAllScreens() {
-            ['main-menu','mode-select','level-select','mega-level-select','game-over-screen','level-complete-screen','pause-screen'].forEach(id => {
+            ['main-menu','mode-select','level-select','mega-level-select','game-over-screen','level-complete-screen','pause-screen','shop-screen'].forEach(id => {
                 document.getElementById(id).classList.add('hidden');
             });
+        }
+
+        function showShop() {
+            renderShop();
+            hideAllScreens();
+            document.getElementById('shop-screen').classList.remove('hidden');
+        }
+
+        function buildShopItem({ name, desc, owned, price, equipped, onBuy, onEquip }) {
+            const div = document.createElement('div');
+            div.className = 'shop-item';
+            const info = document.createElement('div');
+            info.className = 'shop-item-info';
+            info.innerHTML = `<div class="shop-item-name">${name}</div><div class="shop-item-desc">${desc}</div>`;
+            div.appendChild(info);
+
+            const btn = document.createElement('button');
+            btn.className = 'shop-btn';
+            if (owned) {
+                btn.innerText = equipped ? 'Equipped ✓' : 'Equip';
+                if (equipped) btn.classList.add('equipped-btn');
+                btn.onclick = onEquip;
+            } else {
+                btn.innerText = `Buy (${price})`;
+                btn.disabled = coins < price;
+                btn.onclick = onBuy;
+            }
+            div.appendChild(btn);
+            return div;
+        }
+
+        function renderShop() {
+            document.getElementById('shop-coins').innerText = coins;
+            const container = document.getElementById('shop-items');
+            container.innerHTML = '';
+
+            container.appendChild(buildShopItem({
+                name: 'Double Bullets (x2)',
+                desc: `Fire two bullets at once. Equip it and it's permanent — no countdown. (${PRICE_BULLET2} coins)`,
+                owned: ownedBullet2,
+                price: PRICE_BULLET2,
+                equipped: equippedBullet === 2,
+                onBuy: () => {
+                    if (coins >= PRICE_BULLET2 && !ownedBullet2) {
+                        coins -= PRICE_BULLET2;
+                        ownedBullet2 = true;
+                        saveProgress();
+                        renderShop();
+                    }
+                },
+                onEquip: () => {
+                    equippedBullet = equippedBullet === 2 ? 1 : 2;
+                    saveProgress();
+                    renderShop();
+                }
+            }));
+
+            container.appendChild(buildShopItem({
+                name: 'Quad Bullets (x4)',
+                desc: `Fire four bullets at once. Equip it and it's permanent — no countdown. (${PRICE_BULLET4} coins)`,
+                owned: ownedBullet4,
+                price: PRICE_BULLET4,
+                equipped: equippedBullet === 4,
+                onBuy: () => {
+                    if (coins >= PRICE_BULLET4 && !ownedBullet4) {
+                        coins -= PRICE_BULLET4;
+                        ownedBullet4 = true;
+                        saveProgress();
+                        renderShop();
+                    }
+                },
+                onEquip: () => {
+                    equippedBullet = equippedBullet === 4 ? 1 : 4;
+                    saveProgress();
+                    renderShop();
+                }
+            }));
+
+            container.appendChild(buildShopItem({
+                name: 'Wide Hull (Size)',
+                desc: `Permanently widened ship. Equip it and it's permanent — no countdown. (${PRICE_SIZE} coins)`,
+                owned: ownedSize,
+                price: PRICE_SIZE,
+                equipped: sizeEquipped,
+                onBuy: () => {
+                    if (coins >= PRICE_SIZE && !ownedSize) {
+                        coins -= PRICE_SIZE;
+                        ownedSize = true;
+                        saveProgress();
+                        renderShop();
+                    }
+                },
+                onEquip: () => {
+                    sizeEquipped = !sizeEquipped;
+                    saveProgress();
+                    renderShop();
+                }
+            }));
+
+            const lifeItem = document.createElement('div');
+            lifeItem.className = 'shop-item';
+            const lifeInfo = document.createElement('div');
+            lifeInfo.className = 'shop-item-info';
+            lifeInfo.innerHTML = `<div class="shop-item-name">Extra Life (Endless Mode)</div><div class="shop-item-desc">Owned: +${extraLivesOwned} life${extraLivesOwned === 1 ? '' : 's'}. Stackable — next one costs more.</div>`;
+            lifeItem.appendChild(lifeInfo);
+            const lifeBtn = document.createElement('button');
+            lifeBtn.className = 'shop-btn';
+            const price = nextLifePrice();
+            lifeBtn.innerText = `Buy (${price})`;
+            lifeBtn.disabled = coins < price;
+            lifeBtn.onclick = () => {
+                const p = nextLifePrice();
+                if (coins >= p) {
+                    coins -= p;
+                    extraLivesOwned++;
+                    saveProgress();
+                    renderShop();
+                }
+            };
+            lifeItem.appendChild(lifeBtn);
+            container.appendChild(lifeItem);
         }
 
         function showModeSelect() {
@@ -1290,8 +1627,10 @@ function updateAndRenderMenuClash() {
             const heading = document.getElementById('lc-heading');
             const nextBtn = document.getElementById('lc-next-btn');
             document.getElementById('lc-score').innerText = score;
+            let coinsEarned = 0;
 
             if (gameMode === 'mission') {
+                coinsEarned = 50 * missionLevel;
                 unlockedLevel = Math.max(unlockedLevel, Math.min(missionLevel + 1, MAX_MISSION_LEVEL));
                 if (missionLevel >= MAX_MISSION_LEVEL) {
                     missionComplete = true;
@@ -1304,6 +1643,7 @@ function updateAndRenderMenuClash() {
                     nextBtn.innerText = `Next: Level ${missionLevel + 1}`;
                 }
             } else if (gameMode === 'mega') {
+                coinsEarned = 100 + (missionLevel - 1) * 50;
                 unlockedMegaLevel = Math.max(unlockedMegaLevel, Math.min(missionLevel + 1, MAX_MEGA_LEVEL));
                 if (missionLevel >= MAX_MEGA_LEVEL) {
                     heading.innerText = 'MEGA CAMPAIGN COMPLETE';
@@ -1314,6 +1654,10 @@ function updateAndRenderMenuClash() {
                     nextBtn.innerText = `Next: Mega Level ${missionLevel + 1}`;
                 }
             }
+
+            coins += coinsEarned;
+            document.getElementById('coin-val').innerText = coins;
+            document.getElementById('lc-coins').innerText = `+${coinsEarned} 🪙`;
 
             saveProgress();
             document.getElementById('pause-btn').classList.add('hidden');
@@ -1352,7 +1696,7 @@ function updateAndRenderMenuClash() {
             missionBossSpawned = false;
 
             score = 0;
-            lives = isMissionLike ? 1 : 3;
+            lives = isMissionLike ? 1 : (3 + extraLivesOwned);
             currentWave = 1;
             bossActive = false;
             nextBossScore = 5000;
@@ -1363,21 +1707,22 @@ function updateAndRenderMenuClash() {
             powerUps = [];
             fallingHazards = [];
             hazardSpawnTimer = 0;
+            suicideShips = [];
+            suicideSpawnTimer = 0;
             particles = [];
             menuShips = []; 
             gamePaused = false;
 
             rocketBullets = [];
             rocketActive = false;
-            rocketBulletsFired = 0;
-            rocketCountdown = 0;
-            rocketLocked = false;
-            rocketLockTimer = 0;
+            rocketTimer = 0;
+            bulletBoostMode = 0;
+            bulletBoostTimer = 0;
             document.getElementById('rocket-timer').classList.add('hidden');
             
             document.getElementById('score-val').innerText = score;
+            document.getElementById('coin-val').innerText = coins;
             renderLives();
-            document.getElementById('tier-indicator').innerText = 'WEAPON TIER: 1';
             document.getElementById('go-cause').classList.add('hidden');
             updateModeIndicator();
             hideAllScreens();
@@ -1385,6 +1730,11 @@ function updateAndRenderMenuClash() {
             document.getElementById('pause-btn').classList.remove('hidden');
 
             player = new PlayerShip();
+            if (sizeEquipped) {
+                player.permanentWide = true;
+                player.width = player.baseWidth * 1.6;
+            }
+            updateBulletHUD();
             resizeCanvas();
             
             player.targetX = player.x;
@@ -1398,10 +1748,14 @@ function updateAndRenderMenuClash() {
             triggerDebris(player.x + player.width/2, player.y + player.height/2, '#ff0055', 25);
             renderLives();
 
-            player.weaponTier = 1;
-            player.width = player.baseWidth;
+            bulletBoostMode = 0;
+            bulletBoostTimer = 0;
+            rocketActive = false;
+            rocketTimer = 0;
+            player.width = player.permanentWide ? player.baseWidth * 1.6 : player.baseWidth;
             player.widthPowerUpTimer = 0;
-            document.getElementById('tier-indicator').innerText = 'WEAPON TIER: 1';
+            updateBulletHUD();
+            updateRocketHUD();
             document.getElementById('width-timer').classList.add('hidden');
 
             if(lives <= 0) {
@@ -1427,6 +1781,22 @@ function updateAndRenderMenuClash() {
                 bestScore = score;
                 saveProgress();
             }
+
+            let winReward = 0;
+            if (gameMode === 'mission') winReward = 50 * missionLevel;
+            else if (gameMode === 'mega') winReward = 100 + (missionLevel - 1) * 50;
+            else if (gameMode === 'endless') {
+                const ord = bossCount + 1;
+                winReward = ord <= 5 ? 50 : 50 + (ord - 5) * 10;
+            }
+            const consolation = Math.round(winReward * 0.05);
+            if (consolation > 0) {
+                coins += consolation;
+                document.getElementById('coin-val').innerText = coins;
+            }
+            document.getElementById('go-coins').innerText = `+${consolation} 🪙`;
+            saveProgress();
+
             document.getElementById('final-score').innerText = score;
             const causeEl = document.getElementById('go-cause');
             if (message) {
@@ -1506,10 +1876,30 @@ function updateAndRenderMenuClash() {
                         let fh = fallingHazards[k];
                         if(pl.x > fh.x && pl.x < fh.x + fh.width && pl.y > fh.y && pl.y < fh.y + fh.height) {
                             playerLasers.splice(i, 1);
+                            hitSomething = true;
                             triggerDebris(pl.x, pl.y, '#ff8800');
                             fallingHazards.splice(k, 1);
                             score += 15;
                             document.getElementById('score-val').innerText = score;
+                            break;
+                        }
+                    }
+
+                    if(hitSomething) continue;
+
+                    // Player lasers can also destroy suicide ships
+                    for(let k = suicideShips.length - 1; k >= 0; k--) {
+                        let ss = suicideShips[k];
+                        if(pl.x > ss.x && pl.x < ss.x + ss.width && pl.y > ss.y && pl.y < ss.y + ss.height) {
+                            playerLasers.splice(i, 1);
+                            ss.hp--;
+                            triggerDebris(pl.x, pl.y, '#ffaa00');
+                            if(ss.hp <= 0) {
+                                triggerDebris(ss.x + ss.width/2, ss.y + ss.height/2, ss.color, 20);
+                                score += 30;
+                                document.getElementById('score-val').innerText = score;
+                                suicideShips.splice(k, 1);
+                            }
                             break;
                         }
                     }
@@ -1615,6 +2005,25 @@ function updateAndRenderMenuClash() {
                     }
                 }
 
+                // Process Suicide Ships - home toward the player and crash (normal life loss)
+                for(let i = suicideShips.length - 1; i >= 0; i--) {
+                    let ss = suicideShips[i];
+                    ss.update();
+                    ss.draw();
+
+                    if(ss.y > canvas.height + 50) {
+                        suicideShips.splice(i, 1);
+                        continue;
+                    }
+
+                    if(ss.x < player.x + player.width && ss.x + ss.width > player.x &&
+                       ss.y < player.y + player.height && ss.y + ss.height > player.y) {
+                        suicideShips.splice(i, 1);
+                        triggerDebris(ss.x + ss.width/2, ss.y + ss.height/2, ss.color, 25);
+                        handlePlayerDeath();
+                    }
+                }
+
                 // Process Gifts
                 for(let i = powerUps.length - 1; i >= 0; i--) {
                     let pu = powerUps[i];
@@ -1629,11 +2038,12 @@ function updateAndRenderMenuClash() {
                     if(pu.x > player.x && pu.x < player.x + player.width && pu.y > player.y && pu.y < player.y + player.height) {
                         triggerDebris(pu.x, pu.y, pu.color);
                         
-                        if(pu.type === 'weapon') {
-                            if(player.weaponTier < 4) {
-                                player.weaponTier++;
-                                document.getElementById('tier-indicator').innerText = `WEAPON TIER: ${player.weaponTier}`;
-                            }
+                        if(pu.type === 'bullet2') {
+                            bulletBoostMode = 2;
+                            bulletBoostTimer = 30 * 60;
+                        } else if(pu.type === 'bullet4') {
+                            bulletBoostMode = 4;
+                            bulletBoostTimer = 30 * 60;
                         } else if(pu.type === 'rocket') {
                             activateRocketMode();
                         } else {
