@@ -454,10 +454,12 @@
 
         function initStars() {
             stars = [];
+            const w = canvas.width || window.innerWidth || 360;
+            const h = canvas.height || window.innerHeight || 640;
             for(let i=0; i<80; i++) {
                 stars.push({
-                    x: Math.random() * window.innerWidth,
-                    y: Math.random() * window.innerHeight,
+                    x: Math.random() * w,
+                    y: Math.random() * h,
                     size: Math.random() * 2,
                     speed: Math.random() * 2.5 + 1.2
                 });
@@ -465,11 +467,23 @@
         }
 
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // Prefer visualViewport on mobile Safari, where innerHeight can misreport during toolbar animations
+            const vv = window.visualViewport;
+            const w = Math.round((vv && vv.width) || window.innerWidth || document.documentElement.clientWidth || 360);
+            const h = Math.round((vv && vv.height) || window.innerHeight || document.documentElement.clientHeight || 640);
+            canvas.width = w > 0 ? w : 360;
+            canvas.height = h > 0 ? h : 640;
             if(!stars.length) initStars();
         }
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeCanvas);
+        }
+        // Mobile Safari can report a transient/incorrect viewport size on first paint before its
+        // chrome (URL bar, toolbars) finishes settling - re-measure shortly after load as a safety net.
+        setTimeout(resizeCanvas, 300);
+        setTimeout(resizeCanvas, 1000);
 
         // ==========================================
         // DIFFICULTY SYSTEM
@@ -750,7 +764,7 @@
                     ctx.fillRect(-this.width/2, barY, this.width * (this.hp / this.maxHp), 7);
 
                 } else {
-                    ctx.shadowBlur = this.isBoss ? 20 : 8;
+                    ctx.shadowBlur = this.isBoss ? 18 : 0;
                     ctx.shadowColor = this.color;
                     ctx.fillStyle = this.color;
                     ctx.strokeStyle = this.isBoss ? '#ff00ff' : '#ffffff';
@@ -906,12 +920,14 @@
             update() { this.y += this.dy; }
 
             draw() {
-                ctx.save();
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = this.isPlayer ? '#00ffff' : '#ff0033';
-                ctx.fillStyle = this.isPlayer ? '#00ffff' : '#ff0033';
+                // No shadowBlur here - lasers are the highest-frequency draw call in the game,
+                // and shadowBlur is very expensive on Safari/WebKit. Fake the glow cheaply instead.
+                const color = this.isPlayer ? '#00ffff' : '#ff0033';
+                ctx.fillStyle = color;
+                ctx.globalAlpha = 0.35;
+                ctx.fillRect(this.x - 1.5, this.y - 1.5, this.width + 3, this.height + 3);
+                ctx.globalAlpha = 1;
                 ctx.fillRect(this.x, this.y, this.width, this.height);
-                ctx.restore();
             }
         }
 
@@ -1235,8 +1251,8 @@
             if (en.isLevelBoss) bossActive = false;
             if ((gameMode === 'mission' || gameMode === 'mega') && !en.isLevelBoss) missionKills++;
 
-            // Gift drop rate raised to 45%; bosses still guarantee a drop
-            if (Math.random() < 0.45 || en.isBoss) {
+            // Gift drop rate
+            if (Math.random() < 0.05 || en.isBoss) {
                 powerUps.push(new GiftPackage(en.x + en.width/2, en.y + en.height));
             }
 
@@ -1811,6 +1827,16 @@ function updateAndRenderMenuClash() {
         }
 
         function globalEngineLoop() {
+            try {
+                runFrame();
+            } catch (err) {
+                // Never let a single bad frame permanently freeze the game - log and keep going.
+                console.error('Frame error (recovered):', err);
+            }
+            requestAnimationFrame(globalEngineLoop);
+        }
+
+        function runFrame() {
             ctx.fillStyle = '#02020a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -2081,8 +2107,6 @@ function updateAndRenderMenuClash() {
                 ctx.fill();
                 ctx.restore();
             }
-
-            requestAnimationFrame(globalEngineLoop);
         }
 
         // Initialize setup elements and run continuous animation pipelines
